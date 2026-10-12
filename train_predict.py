@@ -320,6 +320,28 @@ def outcome_probs(grid: np.ndarray) -> np.ndarray:
                      (grid * home.T).sum((1, 2))], axis=1)
 
 
+def outcome_masks(G: int) -> list[np.ndarray]:
+    home = np.tril(np.ones((G, G)), -1)        # h > a
+    return [home, np.eye(G), home.T]
+
+
+def pick_scores(grid: np.ndarray) -> np.ndarray:
+    """
+    "Pick" = most likely exact score WITHIN the most likely 1X2 outcome.
+
+    The unconditional most likely score is 1-1 whenever both expected-goal
+    values sit between 1 and 2 (about two matches in three), so it carries
+    little information. The pick is consistent with the 1X2 call; it is
+    slightly LESS often exactly right (see backtest), so both are published.
+    Returns flat indices into the (G, G) grid.
+    """
+    G = grid.shape[1]
+    masks = outcome_masks(G)
+    P = outcome_probs(grid)
+    best = P.argmax(1)
+    return np.array([(grid[i] * masks[best[i]]).argmax() for i in range(len(grid))])
+
+
 def fit_rho(lh, la, hg, ag) -> float:
     hg, ag = hg.astype(int), ag.astype(int)
     ok = (hg <= MAX_GOALS) & (ag <= MAX_GOALS)
@@ -375,7 +397,7 @@ def backtest(m: pd.DataFrame, long: pd.DataFrame, feats: list[str]) -> dict:
     played = long[long["is_result"]]
     seasons = sorted(s for s in played["season"].unique() if s >= FIRST_TEST_SEASON)
     mp = m[m["is_result"]].set_index("match_id")
-    report, pooled = {}, {k: [] for k in ("base", "dc", "lgb", "pinnacle", "y", "score_hit")}
+    report, pooled = {}, {k: [] for k in ("base", "dc", "lgb", "pinnacle", "y", "score_hit", "pick_hit")}
 
     for s in seasons:
         train = played[(played["season"] < s) & played["dc_goals"].notna()]
@@ -404,8 +426,10 @@ def backtest(m: pd.DataFrame, long: pd.DataFrame, feats: list[str]) -> dict:
         grid = score_grid(lam["home"].to_numpy(), lam["away"].to_numpy(), rho)
         P_lgb = outcome_probs(grid)
         top = grid.reshape(len(grid), -1).argmax(1)
-        hit = (top // (MAX_GOALS + 1) == mt["home_goals"].to_numpy()) & \
-              (top % (MAX_GOALS + 1) == mt["away_goals"].to_numpy())
+        hg, ag = mt["home_goals"].to_numpy(), mt["away_goals"].to_numpy()
+        hit = (top // (MAX_GOALS + 1) == hg) & (top % (MAX_GOALS + 1) == ag)
+        pk = pick_scores(grid)
+        pick_hit = (pk // (MAX_GOALS + 1) == hg) & (pk % (MAX_GOALS + 1) == ag)
 
         # Pinnacle closing odds (proportional de-vig)
         odds = mt[["ps_close_h", "ps_close_d", "ps_close_a"]].to_numpy(dtype=float)
@@ -419,6 +443,7 @@ def backtest(m: pd.DataFrame, long: pd.DataFrame, feats: list[str]) -> dict:
             "lightgbm_on_pinnacle_matches": metrics(P_lgb[has], y[has]),
             "pinnacle_close": metrics(P_pin, y[has]),
             "exact_score_hit_rate": float(hit.mean()),
+            "pick_score_hit_rate": float(pick_hit.mean()),
             "rho": rho,
         }
         r = report[s]
@@ -429,7 +454,7 @@ def backtest(m: pd.DataFrame, long: pd.DataFrame, feats: list[str]) -> dict:
 
         pooled["base"].append(P_base); pooled["dc"].append(P_dc); pooled["lgb"].append(P_lgb)
         pooled["pinnacle"].append(_fill(P_pin, has))
-        pooled["y"].append(y); pooled["score_hit"].append(hit)
+        pooled["y"].append(y); pooled["score_hit"].append(hit); pooled["pick_hit"].append(pick_hit)
 
     y = np.concatenate(pooled["y"])
     pin = np.vstack(pooled["pinnacle"]); has = ~np.isnan(pin).any(1)
@@ -441,6 +466,7 @@ def backtest(m: pd.DataFrame, long: pd.DataFrame, feats: list[str]) -> dict:
         "lightgbm_on_pinnacle_matches": metrics(lgbP[has], y[has]),
         "pinnacle_close": metrics(pin[has], y[has]),
         "exact_score_hit_rate": float(np.concatenate(pooled["score_hit"]).mean()),
+        "pick_score_hit_rate": float(np.concatenate(pooled["pick_hit"]).mean()),
     }
     return report
 
@@ -475,6 +501,12 @@ def predict_upcoming(m: pd.DataFrame, long: pd.DataFrame, feats: list[str]) -> l
     grid = score_grid(lam["home"].to_numpy(), lam["away"].to_numpy(), rho)
     P = outcome_probs(grid)
     G = MAX_GOALS + 1
+    picks = pick_scores(grid)
+    masks = outcome_masks(G)
+    M = 6                                        # score matrix shown on the site: 0..5 goals
+
+    def sc(k):                                   # flat index -> "h-a"
+        return f"{k // G}-{k % G}"
 
     out = []
     for i, mid in enumerate(lam.index):
@@ -497,6 +529,13 @@ def predict_upcoming(m: pd.DataFrame, long: pd.DataFrame, feats: list[str]) -> l
             "sot_away": round(float(sot.loc[mid, "away"]), 1),
             "p_over_2_5": round(float(grid[i][total > 2.5].sum()), 4),
             "p_btts": round(float(grid[i][1:, 1:].sum()), 4),
+            "pick": {"score": sc(picks[i]), "p": round(float(flat[picks[i]]), 4)},
+            "score_by_outcome": {
+                name: {"score": sc(int((grid[i] * masks[j]).argmax())),
+                       "p": round(float((grid[i] * masks[j]).max()), 4)}
+                for j, name in enumerate(("home", "draw", "away"))
+            },
+            "score_matrix": np.round(grid[i][:M, :M], 4).tolist(),
             "top_scores": [
                 {"score": f"{k // G}-{k % G}", "p": round(float(flat[k]), 4)} for k in order
             ],
