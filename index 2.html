@@ -1,0 +1,685 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PL Predictor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0c0f14; --surface:#141922; --surface-2:#1b222d; --surface-3:#232c39; --surface-4:#2c3746;
+  --line:#262f3c; --text:#e8edf3; --muted:#8a96a6; --faint:#5d6878;
+  --accent:#ff5a4e; --accent-soft:rgba(255,90,78,.13); --on-accent:#fff;
+  --home:#3fa8ff; --away:#ffb03b; --draw:#8a96a6;
+  --good:#3ed598; --star:#ffcc3d; --heat:255,90,78;
+  --radius:10px; --mono:"JetBrains Mono",ui-monospace,monospace;
+  --shadow:0 12px 40px rgba(0,0,0,.45);
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#eef1f5; --surface:#ffffff; --surface-2:#f5f7fa; --surface-3:#e9edf2; --surface-4:#dfe5ec;
+    --line:#dde3ea; --text:#121820; --muted:#5f6b7a; --faint:#93a0ae;
+    --accent:#e2392d; --accent-soft:rgba(226,57,45,.09);
+    --home:#1f7fd6; --away:#d98200; --draw:#7a8696;
+    --good:#14a36b; --star:#e0a800; --heat:226,57,45;
+    --shadow:0 12px 40px rgba(20,30,50,.18);
+  }
+}
+:root[data-theme="light"]{
+  --bg:#eef1f5; --surface:#ffffff; --surface-2:#f5f7fa; --surface-3:#e9edf2; --surface-4:#dfe5ec;
+  --line:#dde3ea; --text:#121820; --muted:#5f6b7a; --faint:#93a0ae;
+  --accent:#e2392d; --accent-soft:rgba(226,57,45,.09);
+  --home:#1f7fd6; --away:#d98200; --draw:#7a8696;
+  --good:#14a36b; --star:#e0a800; --heat:226,57,45;
+  --shadow:0 12px 40px rgba(20,30,50,.18);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.4 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+body.lock{overflow:hidden}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* ---------- header ---------- */
+header{position:sticky;top:0;z-index:30;background:var(--surface);border-bottom:1px solid var(--line)}
+.bar{max-width:1180px;margin:0 auto;padding:0 16px;height:56px;display:flex;align-items:center;gap:18px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.02em;font-size:17px;white-space:nowrap}
+.brand-mark{width:28px;height:28px;border-radius:8px;background:var(--accent);display:grid;place-items:center;color:var(--on-accent);font-size:13px;font-weight:800}
+.brand small{color:var(--muted);font-weight:600;font-size:12px}
+nav.tabs{display:flex;gap:4px}
+nav.tabs button{padding:8px 12px;border-radius:8px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:6px;white-space:nowrap}
+nav.tabs button:hover{color:var(--text)}
+nav.tabs button[aria-selected="true"]{color:var(--text);background:var(--surface-3)}
+.count{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--star);color:#1a1300;font-size:11px;font-weight:800;display:inline-grid;place-items:center}
+.count:empty{display:none}
+.spacer{flex:1}
+.search{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:0 10px;height:34px;width:230px}
+.search:focus-within{border-color:var(--accent)}
+.search input{border:0;background:none;outline:none;color:var(--text);font:inherit;width:100%}
+.search kbd{font:600 11px var(--mono);color:var(--faint);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+.icon-btn{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;color:var(--muted);flex:none}
+.icon-btn:hover{background:var(--surface-3);color:var(--text)}
+.icon-btn:disabled{opacity:.3;cursor:default;background:none}
+
+/* ---------- day strip ---------- */
+.days{max-width:1180px;margin:0 auto;padding:12px 16px 0;display:flex;align-items:center;gap:6px}
+.days .icon-btn{background:var(--surface);border:1px solid var(--line)}
+.day-scroll{display:flex;gap:6px;overflow-x:auto;flex:1;scroll-behavior:smooth;cursor:grab;padding:2px 0;
+  scrollbar-width:thin;scrollbar-color:var(--surface-4) transparent;mask-image:linear-gradient(90deg,transparent,#000 14px,#000 calc(100% - 14px),transparent)}
+.day-scroll.dragging{cursor:grabbing;scroll-behavior:auto}
+.day-scroll::-webkit-scrollbar{height:4px}
+.day-scroll::-webkit-scrollbar-thumb{background:var(--surface-4);border-radius:2px}
+.chip{flex:none;padding:6px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--muted);font-weight:600;font-size:13px;white-space:nowrap;display:flex;flex-direction:column;align-items:center;line-height:1.15;min-width:58px;user-select:none}
+.chip:first-child{margin-left:10px}.chip:last-child{margin-right:10px}
+.chip b{color:var(--text);font-weight:700;font-size:13px}
+.chip small{font-size:10px;font-weight:700;color:var(--faint);letter-spacing:.03em}
+.chip:hover{border-color:var(--surface-4)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.chip[aria-pressed="true"] b,.chip[aria-pressed="true"] small{color:var(--on-accent)}
+.chip .dot{width:4px;height:4px;border-radius:50%;background:var(--star);margin-top:2px}
+
+/* ---------- layout ---------- */
+main{max-width:1180px;margin:0 auto;padding:12px 16px 40px;display:grid;grid-template-columns:minmax(0,1fr) 410px;gap:16px;align-items:start}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.panel + .panel{margin-top:12px}
+.list-col{min-width:0}
+
+/* ---------- list ---------- */
+.league{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.flag{width:20px;height:14px;border-radius:2px;flex:none;box-shadow:0 0 0 1px var(--line);background:
+  linear-gradient(90deg,transparent 42%,#d0102b 42% 58%,transparent 58%),
+  linear-gradient(0deg,transparent 40%,#d0102b 40% 60%,transparent 60%),#fff}
+.league .ctry{color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.04em}
+.league .name{font-weight:700}
+.league .date{margin-left:auto;color:var(--muted);font-size:12px;font-weight:600}
+.toolbar{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted)}
+.seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:2px}
+.seg button{padding:4px 10px;border-radius:6px;font-size:12px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface-4);color:var(--text)}
+.info{width:18px;height:18px;border-radius:50%;border:1px solid var(--faint);color:var(--faint);font:700 11px Inter;display:inline-grid;place-items:center;cursor:help}
+.cols,.row{display:grid;grid-template-columns:30px 52px minmax(0,1fr) 40px 174px;gap:8px;align-items:center;padding:0 14px}
+.cols{padding-top:6px;padding-bottom:6px;color:var(--faint);font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--line)}
+.cols .c{text-align:center}
+.cols .p3{display:grid;grid-template-columns:repeat(3,1fr);text-align:center}
+.row{padding-top:8px;padding-bottom:8px;border-bottom:1px solid var(--line);cursor:pointer;position:relative;transition:background .12s}
+.row:last-child{border-bottom:0}
+.row:hover{background:var(--surface-2)}
+.row[aria-selected="true"]{background:var(--accent-soft)}
+.row[aria-selected="true"]::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
+.star{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--faint);transition:transform .15s,color .15s}
+.star:hover{color:var(--star);background:var(--surface-3)}
+.star.on{color:var(--star)}
+.star.pop{transform:scale(1.35)}
+.star svg{width:17px;height:17px}
+.time{color:var(--muted);font-size:13px;font-weight:600;font-family:var(--mono)}
+.time .soon{display:block;color:var(--accent);font:700 11px Inter}
+.teams{display:flex;flex-direction:column;gap:3px;min-width:0}
+.team{display:flex;align-items:center;gap:8px;min-width:0}
+.team span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.team.fav span{font-weight:700}
+.team .heart{color:var(--accent);font-size:10px;flex:none}
+.badge{width:18px;height:18px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:8px;font-weight:800;color:#fff;letter-spacing:-.02em}
+.pred{display:flex;flex-direction:column;gap:3px;align-items:center;font-family:var(--mono);font-weight:700}
+.pred span{height:18px;line-height:18px}
+.pred span.win{color:var(--accent)}
+.p3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.pcell{border-radius:6px;background:var(--surface-2);text-align:center;padding:5px 0;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--muted);position:relative;overflow:hidden}
+.pcell i{position:absolute;left:0;bottom:0;height:3px}
+.pcell.top{color:var(--text);background:var(--surface-3)}
+.empty{padding:44px 20px;text-align:center;color:var(--muted);line-height:1.6}
+.empty .big{font-size:30px;margin-bottom:6px;color:var(--faint)}
+.empty b{color:var(--text)}
+
+/* ---------- detail ---------- */
+aside{position:sticky;top:72px;max-height:calc(100vh - 88px);overflow:auto;scrollbar-width:thin}
+.d-top{display:flex;align-items:center;justify-content:space-between;padding:10px 12px 0}
+.d-meta{color:var(--muted);font-size:12px;font-weight:600}
+.save-btn{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;border:1px solid var(--line);font-size:12px;font-weight:700;color:var(--muted)}
+.save-btn:hover{color:var(--text);border-color:var(--surface-4)}
+.save-btn.on{color:#1a1300;background:var(--star);border-color:var(--star)}
+.save-btn svg{width:14px;height:14px}
+.close-sheet{display:none}
+.d-head{padding:10px 16px 16px;border-bottom:1px solid var(--line);text-align:center}
+.d-teams{display:grid;grid-template-columns:1fr auto 1fr;align-items:start;gap:8px;margin-top:6px}
+.d-team{display:flex;flex-direction:column;align-items:center;gap:6px;font-weight:700;min-width:0}
+.d-team span{max-width:100%;text-align:center;line-height:1.25}
+.d-team .badge{width:46px;height:46px;font-size:14px}
+.follow{font-size:11px;font-weight:700;color:var(--faint);padding:3px 8px;border-radius:999px;border:1px solid var(--line)}
+.follow:hover{color:var(--text)}
+.follow.on{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.d-score{font-family:var(--mono);font-size:36px;font-weight:700;line-height:1;padding-top:8px}
+.d-score small{display:block;font:600 11px Inter,sans-serif;color:var(--muted);margin-top:6px}
+.verdict{margin-top:12px;font-size:13px;color:var(--muted)}
+.verdict b{color:var(--text)}
+.subtabs{display:flex;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--surface);z-index:1}
+.subtabs button{flex:1;padding:11px 0;color:var(--muted);font-weight:600;font-size:13px;border-bottom:2px solid transparent}
+.subtabs button[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent)}
+.d-body{padding:16px}
+.sec-title{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:0 0 10px;display:flex;justify-content:space-between}
+.sec + .sec{margin-top:20px}
+.stack{display:flex;height:34px;border-radius:8px;overflow:hidden;gap:2px}
+.stack div{display:grid;place-items:center;color:#fff;font-family:var(--mono);font-weight:700;font-size:13px}
+.legend{display:flex;justify-content:space-between;margin-top:6px;color:var(--muted);font-size:12px;gap:8px}
+.legend span:last-child{text-align:right}
+.kv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{background:var(--surface-2);border-radius:8px;padding:10px 6px;text-align:center}
+.tile b{display:block;font-family:var(--mono);font-size:17px}
+.tile span{color:var(--muted);font-size:11px;font-weight:600}
+.tile em{display:block;font-style:normal;color:var(--faint);font-size:11px;margin-top:2px;font-family:var(--mono)}
+.stat{margin-bottom:14px}
+.stat-top{display:flex;justify-content:space-between;font-family:var(--mono);font-weight:700;margin-bottom:6px}
+.stat-top span:nth-child(2){font:600 12px Inter,sans-serif;color:var(--muted)}
+.stat-bars{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.stat-bars div{height:6px;border-radius:3px;background:var(--surface-3);overflow:hidden;display:flex}
+.stat-bars div:first-child{justify-content:flex-end}
+.stat-bars i{display:block;height:100%;border-radius:3px}
+.matrix{display:grid;grid-template-columns:22px repeat(6,1fr);gap:3px;font-family:var(--mono);font-size:11px}
+.matrix .h{color:var(--faint);display:grid;place-items:center;font-weight:700}
+.matrix .c{aspect-ratio:1.35;border-radius:5px;display:grid;place-items:center;font-weight:700;color:var(--text);position:relative}
+.matrix .c.best{outline:2px solid var(--accent);outline-offset:-2px}
+.matrix .c.pick{box-shadow:inset 0 0 0 2px var(--star)}
+.axis{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin:0 0 6px 25px}
+.mx-legend{display:flex;gap:14px;margin-top:10px;font-size:11px;color:var(--muted)}
+.mx-legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;vertical-align:-1px}
+.note{color:var(--muted);font-size:12px;line-height:1.55;margin-top:14px;padding:10px 12px;background:var(--surface-2);border-radius:8px}
+
+/* ---------- performance ---------- */
+.perf{grid-column:1 / -1}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;padding:16px}
+.kpi{background:var(--surface-2);border-radius:var(--radius);padding:14px}
+.kpi span{color:var(--muted);font-size:12px;font-weight:600}
+.kpi b{display:block;font-family:var(--mono);font-size:24px;margin:4px 0 2px}
+.kpi small{color:var(--faint);font-size:12px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px 14px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--faint);font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+th:first-child,td:first-child{text-align:left}
+td{font-family:var(--mono)}
+td.best{color:var(--good);font-weight:700}
+.tbl-wrap{overflow-x:auto}
+.explain{padding:14px 16px;color:var(--muted);font-size:13px;line-height:1.6;border-top:1px solid var(--line)}
+
+/* ---------- toast ---------- */
+.toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);background:var(--surface-4);color:var(--text);padding:10px 16px;border-radius:10px;font-weight:600;font-size:13px;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.2s;z-index:60;display:flex;gap:12px;align-items:center}
+.toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+.toast button{color:var(--accent);font-weight:700}
+
+footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;color:var(--faint);font-size:12px;display:flex;gap:16px;flex-wrap:wrap}
+
+/* ---------- responsive ---------- */
+@media (max-width: 960px){
+  main{grid-template-columns:1fr}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  aside{position:fixed;inset:auto 0 0 0;top:auto;max-height:88vh;border-radius:16px 16px 0 0;z-index:50;box-shadow:var(--shadow);transform:translateY(105%);transition:transform .25s ease;border-bottom:0}
+  aside.open{transform:none}
+  .scrim{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;opacity:0;pointer-events:none;transition:opacity .2s}
+  .scrim.show{opacity:1;pointer-events:auto}
+  .close-sheet{display:grid}
+  .grabber{width:40px;height:4px;border-radius:2px;background:var(--surface-4);margin:8px auto 0}
+}
+@media (min-width: 961px){ .grabber,.scrim{display:none} }
+@media (max-width: 640px){
+  .bar{gap:10px}
+  .brand small,.search{display:none}
+  .search.open{display:flex;position:absolute;left:12px;right:12px;top:11px;width:auto;z-index:2}
+  nav.tabs button{padding:8px}
+  nav.tabs .lbl{display:none}
+  .cols{display:none}
+  .row{grid-template-columns:28px 42px minmax(0,1fr) 28px 118px;gap:6px;padding:8px 10px}
+  .pcell{font-size:11px}
+  .toolbar{padding:8px 10px;flex-wrap:wrap}
+  .league{padding:10px}
+  .league .date{display:none}
+  .kpis{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand"><div class="brand-mark">PL</div><span>Predictor</span><small>xG model</small></div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-view="matches"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="m12 7 4 3-1.5 4.5h-5L8 10z"/></svg><span class="lbl">Αγώνες</span></button>
+      <button role="tab" data-view="saved"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg><span class="lbl">Αποθηκευμένα</span><span class="count" id="savedCount"></span></button>
+      <button role="tab" data-view="perf"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span class="lbl">Απόδοση</span></button>
+    </nav>
+    <div class="spacer"></div>
+    <label class="search" id="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" style="color:var(--muted);flex:none"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" placeholder="Αναζήτηση ομάδας" autocomplete="off"><kbd>/</kbd></label>
+    <button class="icon-btn" id="searchBtn" title="Αναζήτηση" style="display:none"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+    <button class="icon-btn" id="themeBtn" title="Αλλαγή θέματος"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+  </div>
+</header>
+
+<div class="days" id="days"></div>
+<main id="main"><div class="panel"><div class="empty">Φόρτωση προβλέψεων…</div></div></main>
+<footer id="foot"></footer>
+<div class="scrim" id="scrim"></div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const store = {
+  get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+const state = {
+  data: null, backtest: null, view: "matches", day: null, sel: null, sub: "summary", q: "",
+  saved: new Set(store.get("savedMatches", [])),
+  follow: new Set(store.get("followTeams", store.get("favs", []))),   // migrate old "favs"
+  scoreMode: store.get("scoreMode", "pick"),
+  sheetOpen: false
+};
+const STAR = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>`;
+const STAR_O = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/></svg>`;
+
+/* ---------- helpers ---------- */
+const pct = p => Math.round(p * 100) + "%";
+const kickoff = m => new Date(m.kickoff + "Z");                 // Understat times are UTC
+const dayKey = d => d.toLocaleDateString("en-CA");
+const fmtTime = d => d.toLocaleTimeString("el-GR", {hour:"2-digit", minute:"2-digit", hourCycle:"h23"});
+const fmtDay = (d, opt) => d.toLocaleDateString("el-GR", opt);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const initials = (name, n = 2) => {
+  const w = name.replace(/[^A-Za-z' ]/g,"").split(" ").filter(Boolean);
+  return (w.length > 1 ? w[0][0] + w[1][0] : name.slice(0, n)).toUpperCase();
+};
+const teamColor = name => { let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360; return `hsl(${h} 55% 42%)`; };
+const badge = (n, big) => `<span class="badge" style="background:${teamColor(n)}">${esc(initials(n, big ? 3 : 2))}</span>`;
+const byId = id => state.data.matches.find(m => m.match_id === id);
+const isSavedMatch = m => state.saved.has(m.match_id);
+const involvesFollowed = m => state.follow.has(m.home_team) || state.follow.has(m.away_team);
+
+// Older predictions.json files lack "pick"/"score_by_outcome": derive from top_scores.
+function scores(m){
+  const out = ["home","draw","away"];
+  const oc = s => { const [h,a] = s.split("-").map(Number); return h > a ? "home" : h === a ? "draw" : "away"; };
+  const mode = m.top_scores[0];
+  const fav = out[[m.p_home, m.p_draw, m.p_away].indexOf(Math.max(m.p_home, m.p_draw, m.p_away))];
+  const pick = m.pick || m.top_scores.find(s => oc(s.score) === fav) || mode;
+  const byOut = m.score_by_outcome || Object.fromEntries(out.map(o => [o, m.top_scores.find(s => oc(s.score) === o) || null]));
+  return {mode, pick, byOut, fav};
+}
+const shown = m => state.scoreMode === "pick" ? scores(m).pick : scores(m).mode;
+
+let toastT;
+function toast(msg, undo){
+  const t = $("#toast");
+  t.innerHTML = esc(msg) + (undo ? ` <button id="undo">Αναίρεση</button>` : "");
+  t.classList.add("show");
+  if (undo) $("#undo").onclick = () => { undo(); t.classList.remove("show"); };
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+/* ---------- data ---------- */
+async function getJSON(url){
+  const r = await fetch(url, {cache:"no-store"});
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+  return body;
+}
+async function load(){
+  try {
+    state.data = await getJSON("data/predictions.json").catch(() => getJSON("predictions/predictions.json"));
+  } catch (e) {
+    $("#days").innerHTML = "";
+    $("#main").innerHTML = `<div class="panel" style="grid-column:1/-1"><div class="empty">Δεν βρέθηκαν προβλέψεις.<br><small>${esc(e.message)}</small></div></div>`;
+    return;
+  }
+  state.backtest = await getJSON("data/backtest.json").catch(() => getJSON("predictions/backtest.json")).catch(() => null);
+  const cutoff = Date.now() - 2 * 3600e3;                         // keep games that kicked off < 2h ago
+  state.data.matches = state.data.matches.filter(m => kickoff(m).getTime() > cutoff);
+  // forget saved matches that are no longer upcoming
+  const ids = new Set(state.data.matches.map(m => m.match_id));
+  state.saved = new Set([...state.saved].filter(id => ids.has(id))); persist();
+  state.day = dayKeys()[0] || null;
+  render();
+}
+const dayKeys = () => [...new Set(state.data.matches.map(m => dayKey(kickoff(m))))];
+function persist(){
+  store.set("savedMatches", [...state.saved]);
+  store.set("followTeams", [...state.follow]);
+  $("#savedCount").textContent = state.saved.size || "";
+}
+
+/* ---------- render ---------- */
+function render(){
+  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.view === state.view));
+  $("#savedCount").textContent = state.saved.size || "";
+  $("#days").style.display = state.view === "matches" && !state.q.trim() ? "" : "none";
+  if (state.view === "perf") { $("#main").innerHTML = perfHTML(); closeSheet(); }
+  else { if (state.view === "matches") renderDays(); renderList(); }
+  renderFoot();
+}
+
+function renderDays(){
+  const keys = dayKeys();
+  const today = dayKey(new Date()), tomorrow = dayKey(new Date(Date.now() + 864e5));
+  const savedDays = new Set(state.data.matches.filter(m => isSavedMatch(m) || involvesFollowed(m)).map(m => dayKey(kickoff(m))));
+  const i = keys.indexOf(state.day);
+  $("#days").innerHTML = `
+    <button class="icon-btn" data-step="-1" title="Προηγούμενη μέρα (←)" ${i <= 0 ? "disabled" : ""}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="m15 18-6-6 6-6"/></svg></button>
+    <div class="day-scroll" id="dayScroll">${keys.map(k => {
+      const d = new Date(k + "T12:00");
+      const top = k === today ? "ΣΗΜΕΡΑ" : k === tomorrow ? "ΑΥΡΙΟ" : fmtDay(d, {weekday:"short"}).toUpperCase();
+      return `<button class="chip" aria-pressed="${k === state.day}" data-day="${k}"><small>${top}</small><b>${d.getDate()}/${d.getMonth()+1}</b>${savedDays.has(k) ? '<span class="dot"></span>' : ""}</button>`;
+    }).join("")}</div>
+    <button class="icon-btn" data-step="1" title="Επόμενη μέρα (→)" ${i >= keys.length - 1 ? "disabled" : ""}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="m9 18 6-6-6-6"/></svg></button>`;
+  const sc = $("#dayScroll");
+  const on = sc.querySelector('[aria-pressed="true"]');
+  if (on) sc.scrollLeft = on.offsetLeft - sc.clientWidth / 2 + on.offsetWidth / 2;
+  enableDragScroll(sc);
+}
+
+// Mouse wheel scrolls the day strip sideways; click-and-drag scrolls it too.
+// Window-level listeners are attached once; `drag.el` points at the current strip.
+const drag = {el: null, down: false, x: 0, left: 0, moved: false};
+addEventListener("pointermove", e => {
+  if (!drag.down) return;
+  const dx = e.clientX - drag.x;
+  if (Math.abs(dx) > 4) { drag.moved = true; drag.el.classList.add("dragging"); }
+  if (drag.moved) drag.el.scrollLeft = drag.left - dx;
+});
+addEventListener("pointerup", () => {
+  if (!drag.down) return;
+  drag.down = false; drag.el.classList.remove("dragging");
+  setTimeout(() => drag.moved = false, 0);
+});
+function enableDragScroll(el){
+  drag.el = el;
+  el.addEventListener("wheel", e => {
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { el.scrollLeft += e.deltaY; e.preventDefault(); }
+  }, {passive:false});
+  el.addEventListener("pointerdown", e => {
+    if (e.pointerType !== "mouse") return;            // touch already scrolls natively
+    Object.assign(drag, {down: true, moved: false, x: e.clientX, left: el.scrollLeft});
+  });
+  el.addEventListener("click", e => { if (drag.moved) { e.stopPropagation(); e.preventDefault(); } }, true);
+}
+
+function listMatches(){
+  const q = state.q.trim().toLowerCase();
+  if (q) return state.data.matches.filter(m => (m.home_team + " " + m.away_team).toLowerCase().includes(q));
+  if (state.view === "saved") return state.data.matches.filter(m => isSavedMatch(m) || involvesFollowed(m));
+  return state.data.matches.filter(m => dayKey(kickoff(m)) === state.day);
+}
+
+function renderList(){
+  const list = listMatches();
+  if (!list.find(m => m.match_id === state.sel)) state.sel = innerWidth > 960 ? (list[0]?.match_id ?? null) : null;
+
+  let body;
+  if (!list.length && state.view === "saved" && !state.q.trim()) {
+    body = `<div class="empty"><div class="big">☆</div><b>Δεν έχεις αποθηκευμένους αγώνες.</b><br>
+      Πάτα το ☆ δίπλα σε έναν αγώνα για να τον κρατήσεις εδώ,<br>ή «Ακολούθησε» μια ομάδα για να βλέπεις όλους τους αγώνες της.</div>`;
+  } else if (!list.length) {
+    body = `<div class="empty">Δεν βρέθηκαν αγώνες για «${esc(state.q)}».</div>`;
+  } else {
+    const groups = {};
+    for (const m of list) (groups[dayKey(kickoff(m))] ??= []).push(m);
+    body = toolbarHTML(list.length) + Object.entries(groups).map(([k, ms]) => `
+      <div class="league"><span class="flag"></span><span class="ctry">ΑΓΓΛΙΑ</span><span class="name">Premier League</span>
+        <span class="date">${fmtDay(new Date(k + "T12:00"), {weekday:"long", day:"numeric", month:"long"})}</span></div>
+      <div class="cols"><span></span><span>Ώρα</span><span>Αγώνας</span><span class="c">Σκορ</span><span class="p3"><span>1</span><span>X</span><span>2</span></span></div>
+      ${ms.map(rowHTML).join("")}`).join("");
+  }
+  $("#main").innerHTML = `<section class="panel list-col">${body}</section><aside class="panel ${state.sheetOpen ? "open" : ""}" id="detail"></aside>`;
+  renderDetail();
+}
+
+function toolbarHTML(n){
+  const title = state.scoreMode === "pick"
+    ? "Τάση: το πιθανότερο σκορ μέσα στο πιθανότερο αποτέλεσμα (1/X/2)."
+    : "Ακριβές: το πιο πιθανό σκορ συνολικά. Συνήθως 1-1, γιατί οι περισσότερες ομάδες έχουν xG μεταξύ 1 και 2.";
+  const parts = [];
+  if (state.saved.size) parts.push(`${state.saved.size} ${state.saved.size === 1 ? "αποθηκευμένος" : "αποθηκευμένοι"}`);
+  if (state.follow.size) parts.push(`${state.follow.size} ${state.follow.size === 1 ? "ομάδα" : "ομάδες"} που ακολουθείς`);
+  const lbl = state.view === "saved" && !state.q.trim() ? `${n} αγώνες · ${parts.join(" + ")}` : `${n} αγώνες`;
+  return `<div class="toolbar"><span>${lbl}</span><span class="spacer" style="flex:1"></span>
+    <span>Σκορ:</span><div class="seg"><button data-mode="pick" aria-pressed="${state.scoreMode === "pick"}">Τάση</button><button data-mode="mode" aria-pressed="${state.scoreMode === "mode"}">Ακριβές</button></div>
+    <span class="info" title="${esc(title)}">i</span></div>`;
+}
+
+function rowHTML(m){
+  const d = kickoff(m), mins = (d - Date.now()) / 6e4;
+  const soon = mins <= 0 ? `<span class="soon">LIVE</span>` : mins < 180 ? `<span class="soon">σε ${mins < 60 ? Math.round(mins) + "′" : Math.round(mins/60) + "ω"}</span>` : "";
+  const ps = [m.p_home, m.p_draw, m.p_away], mx = Math.max(...ps);
+  const cols = ["var(--home)", "var(--draw)", "var(--away)"];
+  const [h, a] = shown(m).score.split("-").map(Number);
+  const team = n => `<div class="team ${state.follow.has(n) ? "fav" : ""}">${badge(n)}<span>${esc(n)}</span>${state.follow.has(n) ? '<span class="heart">♥</span>' : ""}</div>`;
+  const on = isSavedMatch(m);
+  return `<div class="row" role="button" tabindex="0" data-id="${m.match_id}" aria-selected="${m.match_id === state.sel}">
+    <button class="star ${on ? "on" : ""}" data-save="${m.match_id}" title="${on ? "Αφαίρεση από αποθηκευμένα" : "Αποθήκευση αγώνα"}" aria-pressed="${on}">${on ? STAR : STAR_O}</button>
+    <div class="time">${fmtTime(d)}${soon}</div>
+    <div class="teams">${team(m.home_team)}${team(m.away_team)}</div>
+    <div class="pred"><span class="${h > a ? "win" : ""}">${h}</span><span class="${a > h ? "win" : ""}">${a}</span></div>
+    <div class="p3">${ps.map((p, i) => `<div class="pcell ${p === mx ? "top" : ""}">${pct(p)}<i style="width:${p*100}%;background:${cols[i]}"></i></div>`).join("")}</div>
+  </div>`;
+}
+
+function renderDetail(){
+  const el = $("#detail"); if (!el) return;
+  const m = state.sel && byId(state.sel);
+  if (!m) { el.innerHTML = `<div class="empty">Διάλεξε έναν αγώνα για ανάλυση.</div>`; return; }
+  const d = kickoff(m), S = scores(m), on = isSavedMatch(m);
+  const followBtn = n => `<button class="follow ${state.follow.has(n) ? "on" : ""}" data-follow="${esc(n)}">${state.follow.has(n) ? "♥ Ακολουθείς" : "+ Ακολούθησε"}</button>`;
+  const favName = {home: m.home_team, away: m.away_team}[S.fav];
+  const favP = Math.max(m.p_home, m.p_draw, m.p_away);
+  const strength = favP >= .6 ? "καθαρό φαβορί" : favP >= .45 ? "φαβορί" : "ελαφρύ προβάδισμα";
+  const tabs = [["summary","Σύνοψη"],["stats","Στατιστικά"],["scores","Σκορ"]];
+  el.innerHTML = `
+    <div class="grabber"></div>
+    <div class="d-top">
+      <button class="save-btn ${on ? "on" : ""}" data-save="${m.match_id}">${on ? STAR : STAR_O}${on ? "Αποθηκευμένο" : "Αποθήκευση"}</button>
+      <span class="d-meta">${fmtDay(d, {weekday:"short", day:"numeric", month:"short"})} · ${fmtTime(d)}</span>
+      <button class="icon-btn close-sheet" data-close title="Κλείσιμο"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <div class="d-head">
+      <div class="d-teams">
+        <div class="d-team">${badge(m.home_team, true)}<span>${esc(m.home_team)}</span>${followBtn(m.home_team)}</div>
+        <div class="d-score">${S.pick.score.replace("-", " – ")}<small>τάση · ${pct(S.pick.p)}</small></div>
+        <div class="d-team">${badge(m.away_team, true)}<span>${esc(m.away_team)}</span>${followBtn(m.away_team)}</div>
+      </div>
+      <div class="verdict">${favName ? `<b>${esc(favName)}</b>: ${strength} (${pct(favP)})` : `Ισορροπημένος αγώνας`} · πιθανότερο ακριβές σκορ <b class="num">${S.mode.score}</b> (${pct(S.mode.p)})</div>
+    </div>
+    <div class="subtabs">${tabs.map(([k, l]) => `<button data-sub="${k}" aria-selected="${state.sub === k}">${l}</button>`).join("")}</div>
+    <div class="d-body">${{summary, stats, scoresTab}[state.sub === "scores" ? "scoresTab" : state.sub](m, S)}</div>`;
+}
+
+function summary(m){
+  const seg = (p, c) => `<div style="flex:${p};background:${c}">${p >= .12 ? pct(p) : ""}</div>`;
+  const fair = p => (1 / p).toFixed(2);
+  return `
+    <div class="sec"><p class="sec-title">Πιθανότητες αποτελέσματος</p>
+      <div class="stack">${seg(m.p_home,"var(--home)")}${seg(m.p_draw,"var(--draw)")}${seg(m.p_away,"var(--away)")}</div>
+      <div class="legend"><span>1 · ${esc(m.home_team)}</span><span>X</span><span>2 · ${esc(m.away_team)}</span></div>
+    </div>
+    <div class="sec"><p class="sec-title"><span>Δίκαιες αποδόσεις</span><span title="Απόδοση χωρίς κέρδος στοιχηματικής: 1 / πιθανότητα">1 / p</span></p>
+      <div class="kv">
+        <div class="tile"><b>${fair(m.p_home)}</b><span>1</span></div>
+        <div class="tile"><b>${fair(m.p_draw)}</b><span>X</span></div>
+        <div class="tile"><b>${fair(m.p_away)}</b><span>2</span></div>
+      </div>
+    </div>
+    <div class="sec"><p class="sec-title">Αγορές γκολ</p>
+      <div class="kv">
+        <div class="tile"><b>${pct(m.p_over_2_5)}</b><span>Over 2.5</span></div>
+        <div class="tile"><b>${pct(1 - m.p_over_2_5)}</b><span>Under 2.5</span></div>
+        <div class="tile"><b>${pct(m.p_btts)}</b><span>Γκολ-Γκολ</span></div>
+      </div>
+    </div>`;
+}
+
+function stats(m){
+  const row = (label, h, a, dec) => {
+    const tot = h + a || 1;
+    return `<div class="stat">
+      <div class="stat-top"><span>${h.toFixed(dec)}</span><span>${label}</span><span>${a.toFixed(dec)}</span></div>
+      <div class="stat-bars"><div><i style="width:${h/tot*100}%;background:var(--home)"></i></div><div><i style="width:${a/tot*100}%;background:var(--away)"></i></div></div>
+    </div>`;
+  };
+  return `<p class="sec-title"><span>${esc(m.home_team)}</span><span>${esc(m.away_team)}</span></p>
+    ${row("Expected goals (xG)", m.xg_home, m.xg_away, 2)}
+    ${row("Σουτ", m.shots_home, m.shots_away, 1)}
+    ${row("Σουτ στην εστία", m.sot_home, m.sot_away, 1)}
+    <div class="kv" style="margin-top:4px">
+      <div class="tile"><b>${(m.xg_home + m.xg_away).toFixed(2)}</b><span>Αναμ. σύνολο γκολ</span></div>
+      <div class="tile"><b>${(m.shots_home + m.shots_away).toFixed(0)}</b><span>Αναμ. σύνολο σουτ</span></div>
+      <div class="tile"><b>${pct(m.p_btts)}</b><span>Γκολ-Γκολ</span></div>
+    </div>
+    <div class="note">Μέσες τιμές που προβλέπει το μοντέλο. Η κατοχή δεν προβλέπεται: δεν υπάρχουν ελεύθερα ιστορικά δεδομένα.</div>`;
+}
+
+function scoresTab(m, S){
+  const bt = state.backtest?.seasons?.ALL;
+  const by = S.byOut;
+  const tile = (o, label) => by[o] ? `<div class="tile"><b>${by[o].score}</b><span>${label}</span><em>${pct(by[o].p)}</em></div>` : "";
+  let matrix = "";
+  if (m.score_matrix) {
+    const M = m.score_matrix, max = Math.max(...M.flat());
+    const cell = (h, a) => {
+      const p = M[h][a], s = `${h}-${a}`;
+      const cls = (s === S.mode.score ? " best" : "") + (s === S.pick.score && s !== S.mode.score ? " pick" : "");
+      return `<div class="c${cls}" style="background:rgba(var(--heat),${(0.06 + 0.9 * p / max).toFixed(3)})" title="${s}: ${(p*100).toFixed(1)}%">${p >= .005 ? Math.round(p*100) : ""}</div>`;
+    };
+    matrix = `<div class="sec"><p class="sec-title"><span>Πιθανότητα κάθε σκορ (%)</span></p>
+      <div class="axis"><span>← ${esc(m.away_team)}: γκολ →</span></div>
+      <div class="matrix"><div></div>${[0,1,2,3,4,5].map(a => `<div class="h">${a}</div>`).join("")}
+        ${[0,1,2,3,4,5].map(h => `<div class="h">${h}</div>` + [0,1,2,3,4,5].map(a => cell(h, a)).join("")).join("")}
+      </div>
+      <div class="mx-legend"><span><i style="outline:2px solid var(--accent);outline-offset:-2px"></i>Πιθανότερο ακριβές</span><span><i style="box-shadow:inset 0 0 0 2px var(--star)"></i>Τάση</span><span>Γραμμές: ${esc(m.home_team)}</span></div>
+    </div>`;
+  }
+  return `
+    <div class="sec"><p class="sec-title">Πιθανότερο σκορ ανά αποτέλεσμα</p>
+      <div class="kv">${tile("home", "Νίκη " + initials(m.home_team, 3))}${tile("draw", "Ισοπαλία")}${tile("away", "Νίκη " + initials(m.away_team, 3))}</div>
+    </div>
+    ${matrix}
+    <div class="note"><b>Γιατί τόσα 1-1;</b> Όταν και οι δύο ομάδες έχουν αναμενόμενα γκολ μεταξύ 1 και 2, το 1-1 είναι μαθηματικά το πιθανότερο ακριβές σκορ.
+    ${bt?.pick_score_hit_rate ? `Στο backtest το «ακριβές» βγήκε στο ${pct(bt.exact_score_hit_rate)} των αγώνων και η «τάση» στο ${pct(bt.pick_score_hit_rate)}.` : ""}
+    Η τάση συμφωνεί με το φαβορί, το ακριβές πετυχαίνει λίγο συχνότερα.</div>`;
+}
+
+function perfHTML(){
+  const b = state.backtest;
+  if (!b) return `<div class="panel perf"><div class="empty">Δεν υπάρχει ακόμα backtest. Τρέξε το workflow «Train and predict» με backtest.</div></div>`;
+  const A = b.seasons.ALL;
+  const seasons = Object.keys(b.seasons).filter(k => k !== "ALL").sort().reverse();
+  const f = (x, d=4) => x == null ? "—" : x.toFixed(d);
+  const rowH = s => {
+    const r = b.seasons[s];
+    const vals = [r.base_rates?.rps, r.dixon_coles?.rps, r.lightgbm?.rps, r.pinnacle_close?.rps];
+    const best = Math.min(...vals.filter(v => v != null));
+    return `<tr><td>${s}</td>${vals.map(v => `<td class="${v === best ? "best" : ""}">${f(v)}</td>`).join("")}
+      <td>${pct(r.lightgbm.accuracy)}</td><td>${pct(r.exact_score_hit_rate)}</td><td>${r.pick_score_hit_rate != null ? pct(r.pick_score_hit_rate) : "—"}</td><td>${r.lightgbm.n}</td></tr>`;
+  };
+  return `<section class="panel perf">
+    <div class="kpis">
+      <div class="kpi"><span>RPS μοντέλου</span><b>${f(A.lightgbm.rps)}</b><small>μικρότερο = καλύτερο</small></div>
+      <div class="kpi"><span>RPS Pinnacle</span><b>${f(A.pinnacle_close.rps)}</b><small>τελικές αποδόσεις αγοράς</small></div>
+      <div class="kpi"><span>Σωστό 1-X-2</span><b>${pct(A.lightgbm.accuracy)}</b><small>Pinnacle ${pct(A.pinnacle_close.accuracy)}</small></div>
+      <div class="kpi"><span>Ακριβές σκορ</span><b>${pct(A.exact_score_hit_rate)}</b><small>πιθανότερο σκορ</small></div>
+      <div class="kpi"><span>Σκορ «τάσης»</span><b>${A.pick_score_hit_rate != null ? pct(A.pick_score_hit_rate) : "—"}</b><small>${A.lightgbm.n.toLocaleString("el-GR")} αγώνες εκτός δείγματος</small></div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Σεζόν</th><th>Σταθερά %</th><th>Dixon-Coles</th><th>Μοντέλο</th><th>Pinnacle</th><th>Σωστό 1X2</th><th>Ακριβές</th><th>Τάση</th><th>Αγώνες</th></tr></thead>
+      <tbody>${seasons.map(rowH).join("")}</tbody>
+    </table></div>
+    <div class="explain">Κάθε σεζόν προβλέφθηκε από μοντέλο εκπαιδευμένο μόνο σε προηγούμενες σεζόν (walk-forward). Οι στήλες 2–5 δείχνουν RPS (Ranked Probability Score): μετρά όλη την κατανομή πιθανοτήτων 1-X-2, όχι μόνο αν «βγήκε» η πρόβλεψη. Πράσινο = καλύτερο της σεζόν.</div>
+  </section>`;
+}
+
+function renderFoot(){
+  const d = state.data; if (!d) return;
+  $("#foot").innerHTML = `<span>Ενημέρωση: ${new Date(d.generated_at).toLocaleString("el-GR", {hourCycle:"h23"})}</span><span>Μοντέλο: ${esc(d.model)}</span>
+    <span class="num">code ${esc((d.code_commit || "").slice(0,7))} · data ${esc((d.data_commit || "").slice(0,7))}</span>
+    <span>Δεδομένα: Understat, football-data.co.uk</span>`;
+}
+
+/* ---------- actions ---------- */
+function toggleSave(id){
+  const m = byId(id), had = state.saved.has(id);
+  had ? state.saved.delete(id) : state.saved.add(id);
+  persist();
+  refreshStars(id);
+  if (state.view === "saved") renderList(); else renderDays();
+  toast(had ? "Αφαιρέθηκε από τα αποθηκευμένα" : `Αποθηκεύτηκε: ${m.home_team} – ${m.away_team}`, () => toggleSave(id));
+}
+function refreshStars(id){
+  const on = state.saved.has(id);
+  document.querySelectorAll(`[data-save="${id}"]`).forEach(b => {
+    b.classList.toggle("on", on); b.setAttribute("aria-pressed", on);
+    if (b.classList.contains("star")) { b.innerHTML = on ? STAR : STAR_O; b.classList.add("pop"); setTimeout(() => b.classList.remove("pop"), 160); }
+    else b.innerHTML = (on ? STAR : STAR_O) + (on ? "Αποθηκευμένο" : "Αποθήκευση");
+  });
+}
+function toggleFollow(team){
+  const had = state.follow.has(team);
+  had ? state.follow.delete(team) : state.follow.add(team);
+  persist(); renderList(); if (state.view === "matches") renderDays();
+  toast(had ? `Δεν ακολουθείς πια την ${team}` : `Ακολουθείς την ${team}: οι αγώνες της εμφανίζονται στα Αποθηκευμένα`);
+}
+function selectMatch(id){
+  state.sel = id;
+  document.querySelectorAll(".row").forEach(r => r.setAttribute("aria-selected", r.dataset.id === id));
+  renderDetail();
+  if (innerWidth <= 960) openSheet();
+}
+function openSheet(){ state.sheetOpen = true; $("#detail")?.classList.add("open"); $("#scrim").classList.add("show"); document.body.classList.add("lock"); }
+function closeSheet(){ state.sheetOpen = false; $("#detail")?.classList.remove("open"); $("#scrim").classList.remove("show"); document.body.classList.remove("lock"); }
+function stepDay(dir){
+  const keys = dayKeys(), i = keys.indexOf(state.day) + dir;
+  if (i < 0 || i >= keys.length) return;
+  state.day = keys[i]; state.sel = null; render();
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-save],[data-follow],[data-id],[data-day],[data-step],[data-sub],[data-view],[data-mode],[data-close]");
+  if (!t) return;
+  const ds = t.dataset;
+  if (ds.save)   { e.stopPropagation(); return toggleSave(ds.save); }
+  if (ds.follow) { return toggleFollow(ds.follow); }
+  if (ds.id)     { return selectMatch(ds.id); }
+  if (ds.day)    { state.day = ds.day; state.sel = null; return render(); }
+  if (ds.step)   { return stepDay(+ds.step); }
+  if (ds.sub)    { state.sub = ds.sub; return renderDetail(); }
+  if (ds.mode)   { state.scoreMode = ds.mode; store.set("scoreMode", ds.mode); return renderList(); }
+  if ("close" in ds) { return closeSheet(); }
+  if (ds.view)   { state.view = ds.view; state.q = ""; $("#q").value = ""; state.sel = null; closeSheet(); return render(); }
+});
+$("#scrim").addEventListener("click", closeSheet);
+document.addEventListener("keydown", e => {
+  const typing = /INPUT|TEXTAREA/.test(document.activeElement?.tagName);
+  if (e.key === "Enter" && e.target.classList?.contains("row")) return selectMatch(e.target.dataset.id);
+  if (e.key === "Escape") { if (typing) { $("#q").value = ""; state.q = ""; $("#q").blur(); render(); } else closeSheet(); return; }
+  if (typing) return;
+  if (e.key === "/") { e.preventDefault(); $("#q").focus(); }
+  if (state.view === "matches" && !state.q) {
+    if (e.key === "ArrowLeft") stepDay(-1);
+    if (e.key === "ArrowRight") stepDay(1);
+  }
+  if ((e.key === "s" || e.key === "S") && state.sel) toggleSave(state.sel);
+});
+$("#q").addEventListener("input", e => {
+  state.q = e.target.value; state.sel = null;
+  if (state.view === "perf") state.view = "matches";
+  render(); $("#q").focus();
+});
+$("#themeBtn").addEventListener("click", () => {
+  const cur = document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+  document.documentElement.dataset.theme = cur === "light" ? "dark" : "light";
+  store.set("theme", document.documentElement.dataset.theme);
+});
+const saved = store.get("theme", null); if (saved) document.documentElement.dataset.theme = saved;
+const sb = $("#searchBtn");
+const syncSearch = () => { sb.style.display = innerWidth <= 640 ? "grid" : "none"; };
+sb.addEventListener("click", () => { $("#search").classList.toggle("open"); $("#q").focus(); });
+addEventListener("resize", syncSearch); syncSearch();
+
+load();
+})();
+</script>
+</body>
+</html>
