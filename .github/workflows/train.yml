@@ -1,0 +1,60 @@
+name: Train and predict
+
+on:
+  workflow_run:                       # runs automatically after every data update
+    workflows: ["Update EPL data"]
+    types: [completed]
+  workflow_dispatch:                  # manual "Run workflow" button
+    inputs:
+      backtest:
+        description: "Also run the walk-forward backtest"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: train
+  cancel-in-progress: false
+
+jobs:
+  train:
+    # skip if the data update itself failed
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0              # full history, so predictions can record the data commit
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Train and predict
+        run: |
+          # Backtest when requested manually, and every Monday on the automatic run.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.backtest }}" = "true" ] \
+             || [ "$(date -u +%u)" = "1" ]; then
+            python train_predict.py --backtest
+          else
+            python train_predict.py
+          fi
+
+      - name: Commit predictions
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898729+github-actions[bot]@users.noreply.github.com"
+          git add predictions
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "predictions: update $(date -u +%Y-%m-%d)"
+            git pull --rebase
+            git push
+          fi
