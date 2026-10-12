@@ -22,10 +22,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
+
 
       - name: Install dependencies
-        run: pip install requests pandas pyarrow
+        run: pip install -r requirements.txt
 
       - name: Download data
         run: python fetch_epl_data.py --from-season 2000 --to-season 2026
