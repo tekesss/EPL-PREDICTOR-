@@ -1,0 +1,43 @@
+name: Update EPL data
+
+on:
+  schedule:
+    - cron: "0 5 * * *"      # daily 05:00 UTC (08:00 Athens)
+  workflow_dispatch:          # "Run workflow" button for manual runs
+
+permissions:
+  contents: write             # lets the job commit the new data back
+
+concurrency:
+  group: update-data
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install requests pandas pyarrow
+
+      - name: Download data
+        run: python fetch_epl_data.py --from-season 2000 --to-season 2026
+
+      - name: Commit if anything changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898729+github-actions[bot]@users.noreply.github.com"
+          git add data/raw
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "data: update $(date -u +%Y-%m-%d)"
+            git push
+          fi
