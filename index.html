@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PL Predictor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0c0f14; --surface:#141922; --surface-2:#1b222d; --surface-3:#232c39;
+  --line:#262f3c; --text:#e8edf3; --muted:#8a96a6; --faint:#5d6878;
+  --accent:#ff5a4e; --accent-soft:rgba(255,90,78,.14);
+  --home:#3fa8ff; --away:#ffb03b; --draw:#8a96a6;
+  --good:#3ed598; --star:#ffcc3d;
+  --radius:10px;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#eef1f5; --surface:#ffffff; --surface-2:#f5f7fa; --surface-3:#e9edf2;
+    --line:#dde3ea; --text:#121820; --muted:#5f6b7a; --faint:#93a0ae;
+    --accent:#e2392d; --accent-soft:rgba(226,57,45,.10);
+    --home:#1f7fd6; --away:#d98200; --draw:#7a8696;
+    --good:#14a36b; --star:#e0a800;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#eef1f5; --surface:#ffffff; --surface-2:#f5f7fa; --surface-3:#e9edf2;
+  --line:#dde3ea; --text:#121820; --muted:#5f6b7a; --faint:#93a0ae;
+  --accent:#e2392d; --accent-soft:rgba(226,57,45,.10);
+  --home:#1f7fd6; --away:#d98200; --draw:#7a8696;
+  --good:#14a36b; --star:#e0a800;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:14px/1.4 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* ---------- header ---------- */
+header{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--line)}
+.bar{max-width:1180px;margin:0 auto;padding:0 16px;height:56px;display:flex;align-items:center;gap:20px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:-.02em;font-size:17px;white-space:nowrap}
+.brand-mark{width:28px;height:28px;border-radius:8px;background:var(--accent);display:grid;place-items:center;color:#fff;font-size:13px;font-weight:800}
+.brand small{color:var(--muted);font-weight:600;font-size:12px}
+nav.tabs{display:flex;gap:4px;margin-left:8px}
+nav.tabs button{padding:8px 12px;border-radius:8px;color:var(--muted);font-weight:600}
+nav.tabs button[aria-selected="true"]{color:var(--text);background:var(--surface-3)}
+.spacer{flex:1}
+.search{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:0 10px;height:34px;width:220px}
+.search input{border:0;background:none;outline:none;color:var(--text);font:inherit;width:100%}
+.icon-btn{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;color:var(--muted)}
+.icon-btn:hover{background:var(--surface-3);color:var(--text)}
+
+/* ---------- day strip ---------- */
+.days{max-width:1180px;margin:0 auto;padding:12px 16px 0;display:flex;align-items:center;gap:8px}
+.day-scroll{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;flex:1}
+.day-scroll::-webkit-scrollbar{display:none}
+.chip{flex:none;padding:7px 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);color:var(--muted);font-weight:600;font-size:13px;white-space:nowrap}
+.chip b{color:var(--text);font-weight:700}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+.chip[aria-pressed="true"] b{color:#fff}
+.chip.fav[aria-pressed="true"]{background:var(--star);border-color:var(--star);color:#1a1300}
+
+/* ---------- layout ---------- */
+main{max-width:1180px;margin:0 auto;padding:12px 16px 40px;display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:16px;align-items:start}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+
+/* ---------- match list ---------- */
+.league{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.flag{width:20px;height:14px;border-radius:2px;background:
+  linear-gradient(90deg,transparent 42%,#d0102b 42% 58%,transparent 58%),
+  linear-gradient(0deg,transparent 40%,#d0102b 40% 60%,transparent 60%),#fff;flex:none}
+.league .ctry{color:var(--muted);font-size:12px;font-weight:700;letter-spacing:.04em}
+.league .name{font-weight:700}
+.league .date{margin-left:auto;color:var(--muted);font-size:12px;font-weight:600}
+.cols{display:grid;grid-template-columns:28px 54px minmax(0,1fr) 34px 168px;gap:8px;padding:6px 14px;color:var(--faint);font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid var(--line)}
+.cols .p3{display:grid;grid-template-columns:repeat(3,1fr);text-align:center}
+.row{display:grid;grid-template-columns:28px 54px minmax(0,1fr) 34px 168px;gap:8px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--line);cursor:pointer;position:relative}
+.row:last-child{border-bottom:0}
+.row:hover{background:var(--surface-2)}
+.row[aria-selected="true"]{background:var(--accent-soft)}
+.row[aria-selected="true"]::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent)}
+.star{color:var(--faint);font-size:16px;line-height:1;width:28px;height:28px;border-radius:6px}
+.star:hover{color:var(--muted)}
+.star.on{color:var(--star)}
+.time{color:var(--muted);font-size:13px;font-weight:600}
+.time .soon{display:block;color:var(--accent);font-size:11px;font-weight:700}
+.teams{display:flex;flex-direction:column;gap:3px;min-width:0}
+.team{display:flex;align-items:center;gap:8px;min-width:0}
+.team span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.team.fav-team span{font-weight:700}
+.badge{width:18px;height:18px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:8px;font-weight:800;color:#fff;letter-spacing:-.02em}
+.pred{display:flex;flex-direction:column;gap:3px;align-items:center;font-family:var(--mono);font-weight:700}
+.pred span{height:18px;line-height:18px}
+.p3{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.pcell{border-radius:6px;background:var(--surface-2);text-align:center;padding:5px 0;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--muted);position:relative;overflow:hidden}
+.pcell i{position:absolute;left:0;bottom:0;height:3px;border-radius:0 2px 0 0}
+.pcell.top{color:var(--text);background:var(--surface-3)}
+.empty{padding:40px 20px;text-align:center;color:var(--muted)}
+
+/* ---------- detail ---------- */
+aside{position:sticky;top:72px}
+.d-head{padding:18px 16px 14px;border-bottom:1px solid var(--line);text-align:center}
+.d-meta{color:var(--muted);font-size:12px;font-weight:600;margin-bottom:12px}
+.d-teams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px}
+.d-team{display:flex;flex-direction:column;align-items:center;gap:8px;font-weight:700;min-width:0}
+.d-team span{max-width:100%;text-align:center;line-height:1.25}
+.d-team .badge{width:44px;height:44px;font-size:14px}
+.d-score{font-family:var(--mono);font-size:34px;font-weight:700;letter-spacing:.02em}
+.d-score small{display:block;font:600 11px Inter,sans-serif;color:var(--muted);letter-spacing:0;margin-top:2px}
+.subtabs{display:flex;border-bottom:1px solid var(--line)}
+.subtabs button{flex:1;padding:11px 0;color:var(--muted);font-weight:600;font-size:13px;border-bottom:2px solid transparent}
+.subtabs button[aria-selected="true"]{color:var(--text);border-bottom-color:var(--accent)}
+.d-body{padding:16px}
+.sec-title{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:0 0 10px}
+.sec + .sec{margin-top:20px}
+.stack{display:flex;height:34px;border-radius:8px;overflow:hidden;gap:2px}
+.stack div{display:grid;place-items:center;color:#fff;font-family:var(--mono);font-weight:700;font-size:13px;min-width:34px}
+.legend{display:flex;justify-content:space-between;margin-top:6px;color:var(--muted);font-size:12px}
+.kv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{background:var(--surface-2);border-radius:8px;padding:10px;text-align:center}
+.tile b{display:block;font-family:var(--mono);font-size:17px}
+.tile span{color:var(--muted);font-size:11px;font-weight:600}
+.stat{margin-bottom:14px}
+.stat-top{display:flex;justify-content:space-between;font-family:var(--mono);font-weight:700;margin-bottom:6px}
+.stat-top span:nth-child(2){font:600 12px Inter,sans-serif;color:var(--muted)}
+.stat-bars{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.stat-bars div{height:6px;border-radius:3px;background:var(--surface-3);overflow:hidden;display:flex}
+.stat-bars div:first-child{justify-content:flex-end}
+.stat-bars i{display:block;height:100%;border-radius:3px}
+.score-row{display:grid;grid-template-columns:44px 1fr 52px;gap:10px;align-items:center;margin-bottom:8px}
+.score-row b{font-family:var(--mono);font-size:15px}
+.score-row .track{height:8px;background:var(--surface-3);border-radius:4px;overflow:hidden}
+.score-row .track i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.score-row span{font-family:var(--mono);color:var(--muted);text-align:right;font-size:13px}
+.note{color:var(--muted);font-size:12px;line-height:1.5;margin-top:14px;padding:10px 12px;background:var(--surface-2);border-radius:8px}
+
+/* ---------- performance ---------- */
+.perf{grid-column:1 / -1}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px}
+.kpi{background:var(--surface-2);border-radius:var(--radius);padding:14px}
+.kpi span{color:var(--muted);font-size:12px;font-weight:600}
+.kpi b{display:block;font-family:var(--mono);font-size:24px;margin:4px 0 2px}
+.kpi small{color:var(--faint);font-size:12px}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px 14px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--faint);font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+th:first-child,td:first-child{text-align:left}
+td{font-family:var(--mono)}
+td.best{color:var(--good);font-weight:700}
+.tbl-wrap{overflow-x:auto}
+.explain{padding:14px 16px;color:var(--muted);font-size:13px;line-height:1.6;border-top:1px solid var(--line)}
+
+footer{max-width:1180px;margin:0 auto;padding:0 16px 30px;color:var(--faint);font-size:12px;display:flex;gap:16px;flex-wrap:wrap}
+
+/* ---------- responsive ---------- */
+@media (max-width: 960px){
+  main{grid-template-columns:1fr}
+  aside{position:static}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width: 640px){
+  .bar{gap:10px}
+  .brand small,.search{display:none}
+  .search.open{display:flex;position:absolute;left:16px;right:16px;top:11px;width:auto}
+  nav.tabs{margin-left:0}
+  nav.tabs button{padding:8px 9px}
+  .cols{display:none}
+  .row,.cols{grid-template-columns:24px 44px minmax(0,1fr) 26px 120px;gap:6px;padding:8px 10px}
+  .pcell{font-size:11px}
+  .league{padding:10px}
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <div class="brand"><div class="brand-mark">PL</div>Predictor <small>xG model</small></div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-view="matches">Αγώνες</button>
+      <button role="tab" aria-selected="false" data-view="perf">Απόδοση</button>
+    </nav>
+    <div class="spacer"></div>
+    <label class="search" id="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" style="color:var(--muted)"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" placeholder="Αναζήτηση ομάδας" autocomplete="off"></label>
+    <button class="icon-btn" id="searchBtn" title="Αναζήτηση" style="display:none"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+    <button class="icon-btn" id="themeBtn" title="Θέμα"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+  </div>
+</header>
+
+<div class="days" id="days"></div>
+<main id="main"><div class="panel"><div class="empty">Φόρτωση προβλέψεων…</div></div></main>
+<footer id="foot"></footer>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const store = {
+  get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+const state = {
+  data: null, backtest: null, view: "matches", day: null, sel: null, sub: "summary",
+  q: "", favs: new Set(store.get("favs", [])), onlyFavs: false
+};
+
+/* ---------- helpers ---------- */
+const pct = p => Math.round(p * 100) + "%";
+const kickoff = m => new Date(m.kickoff + "Z");          // Understat times are UTC
+const dayKey = d => d.toLocaleDateString("en-CA");
+const fmtTime = d => d.toLocaleTimeString("el-GR", {hour:"2-digit", minute:"2-digit", hourCycle:"h23"});
+const fmtDay = (d, opt={weekday:"short", day:"numeric", month:"short"}) => d.toLocaleDateString("el-GR", opt);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+function initials(name, n = 2){
+  const w = name.replace(/[^A-Za-z' ]/g,"").split(" ").filter(Boolean);
+  return (w.length > 1 ? w[0][0] + w[1][0] : name.slice(0, n)).toUpperCase();
+}
+function teamColor(name){
+  let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360;
+  return `hsl(${h} 55% 42%)`;
+}
+const badge = (n, big = false) => `<span class="badge" style="background:${teamColor(n)}">${esc(initials(n, big ? 3 : 2))}</span>`;
+const topScore = m => m.top_scores[0];
+
+/* ---------- data ---------- */
+async function getJSON(url){
+  const r = await fetch(url, {cache:"no-store"});
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+  return body;
+}
+async function load(){
+  try {
+    // works with app.py (/data/...) and when hosted as static files (predictions/...)
+    state.data = await getJSON("data/predictions.json").catch(() => getJSON("predictions/predictions.json"));
+  } catch (e) {
+    $("#main").innerHTML = `<div class="panel" style="grid-column:1/-1"><div class="empty">Δεν βρέθηκαν προβλέψεις.<br><small>${esc(e.message)}</small></div></div>`;
+    return;
+  }
+  state.backtest = await getJSON("data/backtest.json").catch(() => getJSON("predictions/backtest.json")).catch(() => null);
+  const now = Date.now() - 2 * 3600e3;                     // keep games that kicked off < 2h ago
+  state.data.matches = state.data.matches.filter(m => kickoff(m).getTime() > now);
+  const keys = [...new Set(state.data.matches.map(m => dayKey(kickoff(m))))];
+  state.day = keys[0] || null;
+  const first = state.data.matches.find(m => dayKey(kickoff(m)) === state.day);
+  state.sel = first ? first.match_id : null;
+  render();
+}
+
+/* ---------- render ---------- */
+function render(){
+  document.querySelectorAll("nav.tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.view === state.view));
+  $("#days").style.display = state.view === "matches" ? "" : "none";
+  if (state.view === "perf") { renderPerf(); renderFoot(); return; }
+  renderDays(); renderMatches(); renderFoot();
+}
+
+function visibleMatches(){
+  const q = state.q.trim().toLowerCase();
+  return state.data.matches.filter(m => {
+    if (state.onlyFavs && !(state.favs.has(m.home_team) || state.favs.has(m.away_team))) return false;
+    if (q) return (m.home_team + " " + m.away_team).toLowerCase().includes(q);
+    return dayKey(kickoff(m)) === state.day;
+  });
+}
+
+function renderDays(){
+  const keys = [...new Set(state.data.matches.map(m => dayKey(kickoff(m))))].slice(0, 14);
+  const today = dayKey(new Date()), tomorrow = dayKey(new Date(Date.now() + 864e5));
+  const filtering = state.q.trim() || state.onlyFavs;
+  $("#days").innerHTML =
+    `<button class="chip fav" aria-pressed="${state.onlyFavs}" data-fav>★ Αγαπημένα</button>
+     <div class="day-scroll">${keys.map(k => {
+        const d = new Date(k + "T12:00");
+        const label = k === today ? "Σήμερα" : k === tomorrow ? "Αύριο" : fmtDay(d, {weekday:"short"});
+        return `<button class="chip" aria-pressed="${!filtering && k === state.day}" data-day="${k}">${label} <b>${d.getDate()}/${d.getMonth()+1}</b></button>`;
+      }).join("")}</div>`;
+}
+
+function renderMatches(){
+  const list = visibleMatches();
+  if (!list.find(m => m.match_id === state.sel)) state.sel = list[0]?.match_id ?? null;
+
+  // group by day (search / favourites can span several days)
+  const groups = {};
+  for (const m of list) (groups[dayKey(kickoff(m))] ??= []).push(m);
+
+  const html = Object.entries(groups).map(([k, ms]) => `
+    <div class="league">
+      <span class="flag"></span><span class="ctry">ΑΓΓΛΙΑ</span><span class="name">Premier League</span>
+      <span class="date">${fmtDay(new Date(k + "T12:00"), {weekday:"long", day:"numeric", month:"long"})}</span>
+    </div>
+    <div class="cols"><span></span><span>Ώρα</span><span>Αγώνας</span><span>Σκορ</span><span class="p3"><span>1</span><span>X</span><span>2</span></span></div>
+    ${ms.map(rowHTML).join("")}`).join("");
+
+  $("#main").innerHTML = `
+    <section class="panel">${html || `<div class="empty">Δεν βρέθηκαν αγώνες.</div>`}</section>
+    <aside class="panel" id="detail"></aside>`;
+  renderDetail();
+}
+
+function rowHTML(m){
+  const d = kickoff(m), mins = (d - Date.now()) / 6e4;
+  const soon = mins > 0 && mins < 180 ? `<span class="soon">σε ${mins < 60 ? Math.round(mins) + "′" : Math.round(mins/60) + "ω"}</span>`
+             : mins <= 0 ? `<span class="soon">LIVE</span>` : "";
+  const ps = [m.p_home, m.p_draw, m.p_away], mx = Math.max(...ps);
+  const cols = ["var(--home)", "var(--draw)", "var(--away)"];
+  const [h, a] = topScore(m).score.split("-");
+  const team = n => `<div class="team ${state.favs.has(n) ? "fav-team" : ""}">${badge(n)}<span>${esc(n)}</span></div>`;
+  const favd = state.favs.has(m.home_team) || state.favs.has(m.away_team);
+  return `<div class="row" role="button" tabindex="0" data-id="${m.match_id}" aria-selected="${m.match_id === state.sel}">
+    <button class="star ${favd ? "on" : ""}" data-star="${m.match_id}" title="Αγαπημένη ομάδα">${favd ? "★" : "☆"}</button>
+    <div class="time num">${fmtTime(d)}${soon}</div>
+    <div class="teams">${team(m.home_team)}${team(m.away_team)}</div>
+    <div class="pred"><span>${h}</span><span>${a}</span></div>
+    <div class="p3">${ps.map((p, i) => `<div class="pcell ${p === mx ? "top" : ""}">${pct(p)}<i style="width:${p*100}%;background:${cols[i]}"></i></div>`).join("")}</div>
+  </div>`;
+}
+
+function renderDetail(){
+  const el = $("#detail"); if (!el) return;
+  const m = state.data.matches.find(x => x.match_id === state.sel);
+  if (!m) { el.innerHTML = `<div class="empty">Διάλεξε αγώνα</div>`; return; }
+  const d = kickoff(m), ts = topScore(m);
+  const tabs = [["summary","Σύνοψη"],["stats","Στατιστικά"],["scores","Σκορ"]];
+  el.innerHTML = `
+    <div class="d-head">
+      <div class="d-meta">${fmtDay(d, {weekday:"long", day:"numeric", month:"long"})} · ${fmtTime(d)}</div>
+      <div class="d-teams">
+        <div class="d-team">${badge(m.home_team, true)}<span>${esc(m.home_team)}</span></div>
+        <div class="d-score">${ts.score.replace("-", " – ")}<small>πιθανότερο σκορ · ${pct(ts.p)}</small></div>
+        <div class="d-team">${badge(m.away_team, true)}<span>${esc(m.away_team)}</span></div>
+      </div>
+    </div>
+    <div class="subtabs">${tabs.map(([k, l]) => `<button data-sub="${k}" aria-selected="${state.sub === k}">${l}</button>`).join("")}</div>
+    <div class="d-body">${{summary, stats, scores}[state.sub](m)}</div>`;
+}
+
+function summary(m){
+  const seg = (p, c) => `<div style="flex:${p};background:${c}">${p >= .12 ? pct(p) : ""}</div>`;
+  const fair = p => (1 / p).toFixed(2);
+  return `
+    <div class="sec"><p class="sec-title">Πιθανότητες αποτελέσματος</p>
+      <div class="stack">${seg(m.p_home,"var(--home)")}${seg(m.p_draw,"var(--draw)")}${seg(m.p_away,"var(--away)")}</div>
+      <div class="legend"><span>1 · ${esc(m.home_team)}</span><span>X</span><span>2 · ${esc(m.away_team)}</span></div>
+    </div>
+    <div class="sec"><p class="sec-title">Δίκαιες αποδόσεις (1 / p)</p>
+      <div class="kv">
+        <div class="tile"><b>${fair(m.p_home)}</b><span>1</span></div>
+        <div class="tile"><b>${fair(m.p_draw)}</b><span>X</span></div>
+        <div class="tile"><b>${fair(m.p_away)}</b><span>2</span></div>
+      </div>
+    </div>
+    <div class="sec"><p class="sec-title">Αγορές γκολ</p>
+      <div class="kv">
+        <div class="tile"><b>${pct(m.p_over_2_5)}</b><span>Over 2.5</span></div>
+        <div class="tile"><b>${pct(1 - m.p_over_2_5)}</b><span>Under 2.5</span></div>
+        <div class="tile"><b>${pct(m.p_btts)}</b><span>Γκολ-Γκολ</span></div>
+      </div>
+    </div>`;
+}
+
+function stats(m){
+  const row = (label, h, a, dec) => {
+    const tot = h + a || 1;
+    return `<div class="stat">
+      <div class="stat-top"><span>${h.toFixed(dec)}</span><span>${label}</span><span>${a.toFixed(dec)}</span></div>
+      <div class="stat-bars"><div><i style="width:${h/tot*100}%;background:var(--home)"></i></div><div><i style="width:${a/tot*100}%;background:var(--away)"></i></div></div>
+    </div>`;
+  };
+  return `<p class="sec-title">Αναμενόμενα στατιστικά</p>
+    ${row("Expected goals (xG)", m.xg_home, m.xg_away, 2)}
+    ${row("Σουτ", m.shots_home, m.shots_away, 1)}
+    ${row("Σουτ στην εστία", m.sot_home, m.sot_away, 1)}
+    <div class="note">Μέσες τιμές που προβλέπει το μοντέλο, όχι εγγυημένα νούμερα. Η κατοχή δεν προβλέπεται: δεν υπάρχουν ελεύθερα ιστορικά δεδομένα.</div>`;
+}
+
+function scores(m){
+  const max = m.top_scores[0].p;
+  return `<p class="sec-title">Τα 5 πιθανότερα σκορ</p>
+    ${m.top_scores.map(s => `<div class="score-row"><b>${s.score}</b><div class="track"><i style="width:${s.p/max*100}%"></i></div><span>${pct(s.p)}</span></div>`).join("")}
+    <div class="note">Ακόμα και το πιθανότερο σκορ βγαίνει σπάνια (στο backtest: ${state.backtest ? pct(state.backtest.seasons.ALL.exact_score_hit_rate) : "≈12%"} των αγώνων). Τα 5 μαζί καλύπτουν ${pct(m.top_scores.reduce((s, x) => s + x.p, 0))}.</div>`;
+}
+
+function renderPerf(){
+  const b = state.backtest;
+  if (!b) { $("#main").innerHTML = `<div class="panel perf"><div class="empty">Δεν υπάρχει ακόμα backtest. Τρέξε το workflow με backtest.</div></div>`; return; }
+  const A = b.seasons.ALL;
+  const seasons = Object.keys(b.seasons).filter(k => k !== "ALL").sort().reverse();
+  const f = (x, d=4) => x == null ? "—" : x.toFixed(d);
+  const rowH = s => {
+    const r = b.seasons[s];
+    const vals = [r.base_rates?.rps, r.dixon_coles?.rps, r.lightgbm?.rps, r.pinnacle_close?.rps];
+    const best = Math.min(...vals.filter(v => v != null));
+    return `<tr><td>${s}</td>${vals.map(v => `<td class="${v === best ? "best" : ""}">${f(v)}</td>`).join("")}
+      <td>${pct(r.lightgbm.accuracy)}</td><td>${pct(r.exact_score_hit_rate)}</td><td>${r.lightgbm.n}</td></tr>`;
+  };
+  $("#main").innerHTML = `<section class="panel perf">
+    <div class="kpis">
+      <div class="kpi"><span>RPS μοντέλου</span><b>${f(A.lightgbm.rps)}</b><small>μικρότερο = καλύτερο</small></div>
+      <div class="kpi"><span>RPS Pinnacle (κλείσιμο)</span><b>${f(A.pinnacle_close.rps)}</b><small>η αγορά, σημείο αναφοράς</small></div>
+      <div class="kpi"><span>Σωστό 1-X-2</span><b>${pct(A.lightgbm.accuracy)}</b><small>Pinnacle ${pct(A.pinnacle_close.accuracy)}</small></div>
+      <div class="kpi"><span>Ακριβές σκορ</span><b>${pct(A.exact_score_hit_rate)}</b><small>${A.lightgbm.n.toLocaleString("el-GR")} αγώνες εκτός δείγματος</small></div>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Σεζόν</th><th>Σταθερά %</th><th>Dixon-Coles</th><th>Μοντέλο</th><th>Pinnacle</th><th>Σωστό 1X2</th><th>Ακρ. σκορ</th><th>Αγώνες</th></tr></thead>
+      <tbody>${seasons.map(rowH).join("")}</tbody>
+    </table></div>
+    <div class="explain">Κάθε σεζόν προβλέφθηκε από μοντέλο εκπαιδευμένο μόνο σε προηγούμενες σεζόν (walk-forward). Το RPS (Ranked Probability Score) μετρά όλη την κατανομή πιθανοτήτων 1-X-2, όχι μόνο αν «βγήκε» η πρόβλεψη. Πράσινο = καλύτερο της σεζόν.</div>
+  </section>`;
+}
+
+function renderFoot(){
+  const d = state.data; if (!d) return;
+  const t = new Date(d.generated_at);
+  $("#foot").innerHTML = `<span>Ενημέρωση: ${t.toLocaleString("el-GR", {hourCycle:"h23"})}</span><span>Μοντέλο: ${esc(d.model)}</span>
+    <span class="num">code ${esc((d.code_commit || "").slice(0,7))} · data ${esc((d.data_commit || "").slice(0,7))}</span>
+    <span>Δεδομένα: Understat, football-data.co.uk</span>`;
+}
+
+/* ---------- events ---------- */
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-star],[data-id],[data-day],[data-fav],[data-sub],[data-view]");
+  if (!t) return;
+  if (t.dataset.star){
+    e.stopPropagation();
+    const m = state.data.matches.find(x => x.match_id === t.dataset.star);
+    const on = state.favs.has(m.home_team) || state.favs.has(m.away_team);
+    // starring a match follows both teams; un-starring removes both
+    for (const n of [m.home_team, m.away_team]) on ? state.favs.delete(n) : state.favs.add(n);
+    store.set("favs", [...state.favs]); renderDays(); renderMatches(); return;
+  }
+  if (t.dataset.id){
+    state.sel = t.dataset.id;
+    document.querySelectorAll(".row").forEach(r => r.setAttribute("aria-selected", r.dataset.id === state.sel));
+    renderDetail();
+    if (innerWidth <= 960) $("#detail").scrollIntoView({behavior:"smooth", block:"start"});
+    return;
+  }
+  if (t.dataset.day){ state.day = t.dataset.day; state.q = ""; $("#q").value = ""; state.onlyFavs = false; state.sel = null; render(); return; }
+  if ("fav" in t.dataset){ state.onlyFavs = !state.onlyFavs; state.sel = null; render(); return; }
+  if (t.dataset.sub){ state.sub = t.dataset.sub; renderDetail(); return; }
+  if (t.dataset.view){ state.view = t.dataset.view; render(); }
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target.classList?.contains("row")) e.target.click();
+});
+$("#q").addEventListener("input", e => { state.q = e.target.value; state.sel = null; if (state.view !== "matches") state.view = "matches"; render(); });
+$("#themeBtn").addEventListener("click", () => {
+  const cur = document.documentElement.dataset.theme ||
+    (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+  document.documentElement.dataset.theme = cur === "light" ? "dark" : "light";
+  store.set("theme", document.documentElement.dataset.theme);
+});
+const saved = store.get("theme", null); if (saved) document.documentElement.dataset.theme = saved;
+const sb = $("#searchBtn");
+const syncSearch = () => { sb.style.display = innerWidth <= 640 ? "grid" : "none"; };
+sb.addEventListener("click", () => { $("#search").classList.toggle("open"); $("#q").focus(); });
+addEventListener("resize", syncSearch); syncSearch();
+
+load();
+})();
+</script>
+</body>
+</html>
