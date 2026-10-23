@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-10-22T09:47:47+00:00",
-  "code_commit": "7cdb50cca302c902e0c50edc62f70dcd59b3ef33",
-  "data_commit": "070a4728f3a5453cb12eda8a05a4e25713c7bfcc",
+  "generated_at": "2026-10-23T09:44:20+00:00",
+  "code_commit": "8d8bc4be7d4e92bf3e94dca28ce0bc4d41d65360",
+  "data_commit": "8d8bc4be7d4e92bf3e94dca28ce0bc4d41d65360",
   "model": "dixon-coles + lightgbm-poisson v1",
   "matches": [
     {
